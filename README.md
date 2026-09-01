@@ -11,6 +11,7 @@ A modern, minimalist, and user-friendly to-do list application. Manage your task
 - **Local Storage Persistence**: Your tasks are automatically saved and persist across browser sessions
 - **Smart Filtering**: Filter tasks by All, Active, or Completed status
 - **Drag & Drop Reordering**: Intuitively reorder your tasks with drag and drop functionality
+- **Task Priorities**: Assign high, medium, or low priority to tasks, shown as text badges with symbols (never color alone) and defaulted to medium for existing data
 - **Inline Editing**: Edit task text directly without any modal dialogs
 - **Bulk Actions**: Clear all completed tasks with a single click
 - **Real-Time Statistics**: Track your task count based on current filter
@@ -114,7 +115,8 @@ Each task is stored as an object with the following properties:
     id: "unique-id",           // Generated unique identifier
     text: "Task description",  // Task content
     completed: false,          // Completion status
-    createdAt: "ISO date"      // Creation timestamp
+    createdAt: "ISO date",     // Creation timestamp
+    priority: "medium"         // "high" | "medium" | "low"
 }
 ```
 
@@ -187,7 +189,7 @@ Adjust transition speeds in the CSS variables:
 - [ ] Dark/Light theme toggle
 - [ ] Export/Import tasks
 - [ ] Cloud synchronization
-- [ ] Task priority levels
+- [x] Task priority levels
 
 ## Contributing
 

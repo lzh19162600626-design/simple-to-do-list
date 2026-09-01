@@ -24,12 +24,48 @@ const state = {
 const STORAGE_KEY = 'simple-todo-list';
 
 // ========================================
+// Task Priority
+// ========================================
+
+// Allowed priority values in urgency order (used for select options)
+const PRIORITIES = ['high', 'medium', 'low'];
+
+// Priority assigned to new tasks and to legacy data that has none
+const DEFAULT_PRIORITY = 'medium';
+
+// Presentation metadata: visible label + decorative symbol per priority
+const PRIORITY_META = {
+    high: { label: 'High', symbol: '!!' },
+    medium: { label: 'Medium', symbol: '!' },
+    low: { label: 'Low', symbol: '↓' }
+};
+
+/**
+ * Returns a valid priority, falling back to the default for missing/invalid values
+ * @param {*} value - Stored or selected priority
+ * @returns {string} One of PRIORITIES
+ */
+const normalizePriority = (value) => (
+    typeof value === 'string' && PRIORITIES.includes(value) ? value : DEFAULT_PRIORITY
+);
+
+/**
+ * Builds the option list for a priority select, preselecting the given value
+ * @param {string} selectedValue - Priority to preselect
+ * @returns {string} HTML string
+ */
+const priorityOptionsHTML = (selectedValue) => PRIORITIES
+    .map((value) => `<option value="${value}"${value === selectedValue ? ' selected' : ''}>${PRIORITY_META[value].label}</option>`)
+    .join('');
+
+// ========================================
 // DOM Elements
 // ========================================
 
 const elements = {
     todoForm: document.getElementById('todoForm'),
     todoInput: document.getElementById('todoInput'),
+    todoPriority: document.getElementById('todoPriority'),
     todoList: document.getElementById('todoList'),
     todoCount: document.getElementById('todoCount'),
     emptyState: document.getElementById('emptyState'),
@@ -48,11 +84,32 @@ const elements = {
 const loadFromStorage = () => {
     try {
         const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
+        const parsed = data ? JSON.parse(data) : [];
+        return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
         console.error('LocalStorage read error:', error);
         return [];
     }
+};
+
+/**
+ * Normalizes the priority of every todo, defaulting invalid or missing
+ * values to medium while leaving all other task data and the order untouched
+ * @param {Array} todos - Todo list
+ * @returns {{todos: Array, changed: boolean}} Normalized list and whether anything changed
+ */
+const normalizeTodoPriorities = (todos) => {
+    let changed = false;
+
+    const normalized = todos.map((todo) => {
+        if (!todo || typeof todo !== 'object') return todo;
+        const priority = normalizePriority(todo.priority);
+        if (priority === todo.priority) return todo;
+        changed = true;
+        return { ...todo, priority };
+    });
+
+    return { todos: normalized, changed };
 };
 
 /**
@@ -82,22 +139,26 @@ const generateId = () => {
 /**
  * Adds a new todo
  * @param {string} text - Todo text
+ * @param {string} priority - Selected priority
+ * @returns {boolean} True if the todo was created
  */
-const addTodo = (text) => {
+const addTodo = (text, priority) => {
     const trimmedText = text.trim();
-    if (!trimmedText) return;
+    if (!trimmedText) return false;
 
     const newTodo = {
         id: generateId(),
         text: trimmedText,
         completed: false,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        priority: normalizePriority(priority)
     };
 
     state.todos.unshift(newTodo);
     saveToStorage(state.todos);
     renderTodos();
     updateStats();
+    return true;
 };
 
 /**
@@ -150,11 +211,23 @@ const startEditTodo = (id) => {
 };
 
 /**
+ * Moves focus back to a todo's Edit button after leaving edit mode,
+ * so keyboard position is not lost when the list re-renders
+ * @param {string} id - Todo ID
+ */
+const focusEditButton = (id) => {
+    if (!id) return;
+    const editButton = elements.todoList.querySelector(`[data-id="${id}"] .todo-action-btn.edit`);
+    if (editButton) editButton.focus();
+};
+
+/**
  * Saves a todo edit
  * @param {string} id - Todo ID
  * @param {string} newText - New text
+ * @param {string} newPriority - Newly selected priority
  */
-const saveEditTodo = (id, newText) => {
+const saveEditTodo = (id, newText, newPriority) => {
     const trimmedText = newText.trim();
     if (!trimmedText) {
         cancelEditTodo();
@@ -164,19 +237,23 @@ const saveEditTodo = (id, newText) => {
     const todo = state.todos.find(t => t.id === id);
     if (todo) {
         todo.text = trimmedText;
+        todo.priority = normalizePriority(newPriority);
         saveToStorage(state.todos);
     }
 
     state.editingId = null;
     renderTodos();
+    focusEditButton(id);
 };
 
 /**
  * Cancels a todo edit
  */
 const cancelEditTodo = () => {
+    const editedId = state.editingId;
     state.editingId = null;
     renderTodos();
+    focusEditButton(editedId);
 };
 
 /**
@@ -351,17 +428,27 @@ const handleDragEnd = () => {
  */
 const createTodoItemHTML = (todo) => {
     const isEditing = state.editingId === todo.id;
+    const priorityValue = normalizePriority(todo.priority);
+    const priorityMeta = PRIORITY_META[priorityValue];
 
     if (isEditing) {
         return `
-            <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}">
-                <input 
-                    type="text" 
-                    class="todo-edit-input" 
-                    value="${escapeHtml(todo.text)}"
-                    aria-label="Edit task"
-                >
-                <div class="todo-actions" style="opacity: 1;">
+            <li class="todo-item editing ${todo.completed ? 'completed' : ''}" data-id="${todo.id}">
+                <div class="todo-edit-content">
+                    <input
+                        type="text"
+                        class="todo-edit-input"
+                        value="${escapeHtml(todo.text)}"
+                        aria-label="Edit task"
+                    >
+                    <label class="todo-edit-priority-field">
+                        <span class="todo-priority-label">Priority</span>
+                        <select class="todo-priority-select todo-edit-priority-select">
+                            ${priorityOptionsHTML(priorityValue)}
+                        </select>
+                    </label>
+                </div>
+                <div class="todo-actions">
                     <button class="todo-action-btn save" data-action="save" aria-label="Save">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="20 6 9 17 4 12"></polyline>
@@ -379,10 +466,10 @@ const createTodoItemHTML = (todo) => {
     }
 
     return `
-        <li class="todo-item ${todo.completed ? 'completed' : ''}" 
-            data-id="${todo.id}" 
+        <li class="todo-item ${todo.completed ? 'completed' : ''}"
+            data-id="${todo.id}"
             draggable="true"
-            aria-label="${escapeHtml(todo.text)}, ${todo.completed ? 'completed' : 'active'}">
+            aria-label="Priority: ${priorityMeta.label}, ${escapeHtml(todo.text)}, ${todo.completed ? 'completed' : 'active'}">
             <div class="drag-handle" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="9" cy="5" r="1"></circle>
@@ -394,9 +481,9 @@ const createTodoItemHTML = (todo) => {
                 </svg>
             </div>
             <label class="todo-checkbox">
-                <input 
-                    type="checkbox" 
-                    ${todo.completed ? 'checked' : ''} 
+                <input
+                    type="checkbox"
+                    ${todo.completed ? 'checked' : ''}
                     data-action="toggle"
                     aria-label="${todo.completed ? 'Mark as not completed' : 'Mark as completed'}"
                 >
@@ -406,7 +493,12 @@ const createTodoItemHTML = (todo) => {
                     </svg>
                 </span>
             </label>
-            <span class="todo-text">${escapeHtml(todo.text)}</span>
+            <div class="todo-content">
+                <span class="priority-badge priority-${priorityValue}" aria-hidden="true">
+                    <span class="priority-badge-symbol">${priorityMeta.symbol}</span>${priorityMeta.label}
+                </span>
+                <span class="todo-text">${escapeHtml(todo.text)}</span>
+            </div>
             <div class="todo-actions">
                 <button class="todo-action-btn edit" data-action="edit" aria-label="Edit">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -499,9 +591,14 @@ const updateStats = () => {
  */
 const handleFormSubmit = (event) => {
     event.preventDefault();
-    const text = elements.todoInput.value;
-    addTodo(text);
-    elements.todoInput.value = '';
+    const added = addTodo(elements.todoInput.value, elements.todoPriority.value);
+
+    if (added) {
+        // Reset the form only on success so a rejected (blank) submission
+        // keeps the user's selected priority
+        elements.todoInput.value = '';
+        elements.todoPriority.value = DEFAULT_PRIORITY;
+    }
     elements.todoInput.focus();
 };
 
@@ -527,12 +624,18 @@ const handleTodoListClick = (event) => {
         case 'edit':
             startEditTodo(todoId);
             break;
-        case 'save':
+        case 'save': {
             const editInput = todoItem.querySelector('.todo-edit-input');
+            const editPrioritySelect = todoItem.querySelector('.todo-edit-priority-select');
             if (editInput) {
-                saveEditTodo(todoId, editInput.value);
+                saveEditTodo(
+                    todoId,
+                    editInput.value,
+                    editPrioritySelect ? editPrioritySelect.value : DEFAULT_PRIORITY
+                );
             }
             break;
+        }
         case 'cancel':
             cancelEditTodo();
             break;
@@ -540,21 +643,31 @@ const handleTodoListClick = (event) => {
 };
 
 /**
- * Edit input keyboard handler
+ * Edit controls keyboard handler
+ * Enter in the text input saves; Escape from the text input or the
+ * priority select cancels the whole edit
  * @param {KeyboardEvent} event
  */
 const handleEditKeydown = (event) => {
-    if (event.target.classList.contains('todo-edit-input')) {
-        const todoItem = event.target.closest('.todo-item');
-        const todoId = todoItem?.dataset.id;
+    const target = event.target;
+    const isEditText = target.classList.contains('todo-edit-input');
+    const isEditPriority = target.classList.contains('todo-edit-priority-select');
+    if (!isEditText && !isEditPriority) return;
 
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            saveEditTodo(todoId, event.target.value);
-        } else if (event.key === 'Escape') {
-            event.preventDefault();
-            cancelEditTodo();
-        }
+    const todoItem = target.closest('.todo-item');
+    const todoId = todoItem?.dataset.id;
+
+    if (event.key === 'Enter' && isEditText) {
+        event.preventDefault();
+        const editPrioritySelect = todoItem?.querySelector('.todo-edit-priority-select');
+        saveEditTodo(
+            todoId,
+            target.value,
+            editPrioritySelect ? editPrioritySelect.value : DEFAULT_PRIORITY
+        );
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditTodo();
     }
 };
 
@@ -577,8 +690,15 @@ const handleFilterClick = (event) => {
  * Initializes the application
  */
 const init = () => {
-    // Load data from localStorage
+    // Load data from localStorage and normalize priorities
+    // (legacy tasks without a priority default to medium)
     state.todos = loadFromStorage();
+    const { todos, changed } = normalizeTodoPriorities(state.todos);
+    state.todos = todos;
+    if (changed) {
+        // Persist the migration once so upgraded priorities survive reloads
+        saveToStorage(state.todos);
+    }
 
     // Initial render
     renderTodos();
