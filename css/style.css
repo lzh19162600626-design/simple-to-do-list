@@ -26,6 +26,14 @@
     --color-danger: #ff5b6a;
     --color-danger-hover: #ff7a86;
     --color-warning: #ffb84d;
+
+    /* Task Priority (text colors tuned for WCAG AA on their tinted badges) */
+    --priority-high: #ff8a94;
+    --priority-high-bg: rgba(255, 122, 134, 0.12);
+    --priority-medium: #ffb84d;
+    --priority-medium-bg: rgba(255, 184, 77, 0.12);
+    --priority-low: #a8a8ba;
+    --priority-low-bg: rgba(168, 168, 186, 0.12);
     
     /* Border and Shadow */
     --color-border: #2a2a36;
@@ -184,6 +192,45 @@ body {
 
 .todo-input::placeholder {
     color: var(--color-text-muted);
+}
+
+/* Priority field in the add form (label + native select) */
+.todo-priority-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+.todo-priority-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.todo-priority-select {
+    min-width: 96px;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-family: var(--font-primary);
+    font-size: 0.9rem;
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    color-scheme: dark;
+    transition: border-color var(--transition-fast);
+}
+
+.todo-priority-select:hover {
+    border-color: var(--color-text-muted);
+}
+
+.todo-priority-field .todo-priority-select {
+    height: 100%;
 }
 
 /* ========================================
@@ -348,13 +395,18 @@ body {
     box-shadow: inset 0 -3px 0 var(--color-accent);
 }
 
-.todo-item.completed {
-    opacity: 0.6;
-}
-
 .todo-item.completed .todo-text {
     text-decoration: line-through;
     color: var(--color-text-muted);
+}
+
+/* Dim completed rows without dimming the priority badge, so its
+   text keeps meeting contrast requirements */
+.todo-item.completed .drag-handle,
+.todo-item.completed .todo-checkbox,
+.todo-item.completed .todo-text,
+.todo-item.completed .todo-actions {
+    opacity: 0.6;
 }
 
 @keyframes slideIn {
@@ -398,8 +450,9 @@ body {
 
 .todo-checkbox .checkmark {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     width: 24px;
     height: 24px;
     background: transparent;
@@ -434,6 +487,50 @@ body {
     transform: scale(1);
 }
 
+/* Todo Content (priority badge + task text) */
+.todo-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* Priority badge: symbol + full text, color is supplemental only */
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    border-radius: var(--border-radius-full);
+    white-space: nowrap;
+}
+
+.priority-badge-symbol {
+    font-weight: 700;
+}
+
+.priority-badge.priority-high {
+    color: var(--priority-high);
+    background-color: var(--priority-high-bg);
+}
+
+.priority-badge.priority-medium {
+    color: var(--priority-medium);
+    background-color: var(--priority-medium-bg);
+}
+
+.priority-badge.priority-low {
+    color: var(--priority-low);
+    background-color: var(--priority-low-bg);
+}
+
 /* Todo Text */
 .todo-text {
     flex: 1;
@@ -441,6 +538,26 @@ body {
     color: var(--color-text-primary);
     word-break: break-word;
     transition: all var(--transition-fast);
+}
+
+/* Edit content row (text input + priority select) */
+.todo-edit-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.todo-edit-priority-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.todo-item.editing {
+    cursor: default;
 }
 
 /* Edit Input */
@@ -464,7 +581,12 @@ body {
     transition: opacity var(--transition-fast);
 }
 
-.todo-item:hover .todo-actions {
+.todo-item:hover .todo-actions,
+.todo-actions:focus-within {
+    opacity: 1;
+}
+
+.todo-item.editing .todo-actions {
     opacity: 1;
 }
 
@@ -623,33 +745,98 @@ body {
     body {
         padding: 24px 16px;
     }
-    
+
     .app-title {
         font-size: 2rem;
     }
-    
+
     .todo-form {
         flex-direction: column;
     }
-    
+
+    /* Priority row sits full width between the text input and Add */
+    .todo-priority-field {
+        width: 100%;
+    }
+
+    .todo-priority-field .todo-priority-select {
+        flex: 1;
+        height: auto;
+    }
+
     .btn-add {
         width: 100%;
     }
-    
+
     .filters-section {
         flex-direction: column;
         gap: 12px;
     }
-    
+
     .filter-buttons {
         width: 100%;
         justify-content: center;
     }
-    
+
+    /* Rows wrap: actions stay on the first line, the badge and task
+       text form the content region below */
+    .todo-item {
+        flex-wrap: wrap;
+        row-gap: 10px;
+    }
+
+    .todo-content {
+        flex: 1 1 100%;
+        order: 3;
+    }
+
     .todo-actions {
+        order: 2;
+        margin-left: auto;
         opacity: 1;
     }
-    
+
+    /* Touch targets of at least 44 × 44 CSS px */
+    .todo-checkbox {
+        width: 44px;
+        height: 44px;
+    }
+
+    .todo-action-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    /* Edit mode: text and Priority stack full width, then Save/Cancel */
+    .todo-item.editing {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .todo-edit-content {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .todo-edit-input {
+        flex: none;
+        width: 100%;
+    }
+
+    .todo-edit-priority-field {
+        width: 100%;
+    }
+
+    .todo-edit-priority-field .todo-priority-select {
+        flex: 1;
+    }
+
+    .todo-item.editing .todo-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
     .drag-handle {
         opacity: 0.4;
     }
